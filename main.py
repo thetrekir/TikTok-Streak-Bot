@@ -342,6 +342,26 @@ def send_message_in_open_chat(driver):
         logging.exception(e)
         return False
 
+def handle_passkey_popup(driver):
+    logging.info("Checking for the 'passkey' creation popup...")
+    passkey_popup_button_xpath = "//div[@role='dialog']//button[contains(., 'Belki daha sonra')]"
+    try:
+        wait = WebDriverWait(driver, 15)
+        maybe_later_button = wait.until(
+            EC.element_to_be_clickable((By.XPATH, passkey_popup_button_xpath))
+        )
+        logging.info("Passkey popup found. Clicking 'Maybe later'...")
+        maybe_later_button.click()
+        logging.info("Waiting for the passkey popup to disappear...")
+        wait.until(
+            EC.invisibility_of_element_located((By.XPATH, passkey_popup_button_xpath))
+        )
+        logging.info("Passkey popup dismissed successfully.")
+    except TimeoutException:
+        logging.info("Passkey popup did not appear or was already gone, continuing...")
+    except Exception as e:
+        logging.warning(f"An error occurred while handling the passkey popup: {e}")
+
 @contextmanager
 def managed_webdriver(headless, user_agent):
     user_data_dir = tempfile.mkdtemp()
@@ -396,6 +416,8 @@ def run_bot():
 
             logging.info(f"Navigating to '{TIKTOK_MESSAGES_URL}'...")
             driver.get(TIKTOK_MESSAGES_URL)
+
+            handle_passkey_popup(driver)
 
             logging.info(f"Waiting for message list container ({MESSAGE_LIST_CONTAINER_XPATH})...")
             if not wait_for_element(driver, By.XPATH, MESSAGE_LIST_CONTAINER_XPATH, timeout=35):
