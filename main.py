@@ -15,9 +15,12 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
 from selenium.common.exceptions import NoSuchElementException, TimeoutException, StaleElementReferenceException, ElementNotInteractableException
-from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+
+os.environ['WDM_LOG'] = '0'
+from webdriver_manager.chrome import ChromeDriverManager
+
 
 CONFIG_FILE = "config.json"
 
@@ -60,13 +63,22 @@ def load_or_create_config(filename):
             logging.error(f"ERROR: An unexpected error occurred while loading config file '{filename}': {e}")
             return None
 
+def terminate_lingering_processes():
+    logging.info("Searching for and terminating any lingering chrome/chromedriver processes...")
+    try:
+        os.system("taskkill /F /IM chromedriver.exe /T > NUL 2>&1")
+        os.system("taskkill /F /IM chrome.exe /T > NUL 2>&1")
+        logging.info("Process termination commands executed.")
+    except Exception as e:
+        logging.error(f"An error occurred during process termination: {e}")
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', handlers=[logging.StreamHandler()])
 
 config = load_or_create_config(CONFIG_FILE)
 if config is None:
     logging.critical("Exiting due to configuration file error (loading or creation failed).")
     sys.exit(1)
-    
+
 TEST_MODE = config.get('TEST_MODE', DEFAULT_CONFIG['TEST_MODE'])
 TARGET_USERS = config.get('TARGET_USERS', DEFAULT_CONFIG['TARGET_USERS'])
 MESSAGE_TO_SEND = config.get('MESSAGE_TO_SEND', DEFAULT_CONFIG['MESSAGE_TO_SEND'])
@@ -119,7 +131,7 @@ def load_cookies(driver, cookie_file):
             cookies = json.load(f)
         logging.info(f"Read {len(cookies)} cookies from file.")
 
-        driver.get("https://www.tiktok.com/")
+        driver.get("https://www.tiktok.com/explore")
         logging.info(f"Navigated to main domain: {driver.current_url}. Waiting before adding cookies...")
         time.sleep(random.uniform(3, 5))
         logging.info(f"Starting to add cookies (Browser at {driver.current_url})")
@@ -364,6 +376,9 @@ def handle_passkey_popup(driver):
 
 @contextmanager
 def managed_webdriver(headless, user_agent):
+    terminate_lingering_processes()
+    time.sleep(1)
+
     user_data_dir = tempfile.mkdtemp()
     logging.info(f"Using temporary user data directory: {user_data_dir}")
     
@@ -372,17 +387,17 @@ def managed_webdriver(headless, user_agent):
         chrome_options = Options()
         if headless:
             logging.info("Running in HEADLESS mode.")
-            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--headless=new")
         else:
             logging.info("Running in standard (non-headless) mode.")
         
         chrome_options.add_argument(f"user-agent={user_agent}")
-        chrome_options.add_argument('log-level=3')
+        chrome_options.add_argument("--log-level=3")
         chrome_options.add_argument("--mute-audio")
+        chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument("--disable-blink-features=AutomationControlled")
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
-        chrome_options.add_argument("--disable-gpu")
         chrome_options.add_argument(f"--user-data-dir={user_data_dir}")
 
         service = Service(ChromeDriverManager().install())
@@ -391,12 +406,19 @@ def managed_webdriver(headless, user_agent):
         yield driver
 
     finally:
+        logging.info("Entering cleanup phase...")
         if driver:
-            logging.info("Closing browser via managed context.")
-            driver.quit()
+            try:
+                logging.info("Attempting graceful shutdown with driver.quit().")
+                driver.quit()
+            except Exception as e:
+                logging.warning(f"Error during driver.quit() (might be already closed): {e}")
+        
+        terminate_lingering_processes()
         
         logging.info(f"Cleaning up temporary user data directory: {user_data_dir}")
         try:
+            time.sleep(2)
             shutil.rmtree(user_data_dir)
         except Exception as e:
             logging.warning(f"Could not fully remove temp directory {user_data_dir}. It might be cleaned up later. Error: {e}")
@@ -470,43 +492,31 @@ if __name__ == "__main__":
             now = datetime.now()
             current_time = now.time()
             today = now.date()
+            
+            target_plus_one_minute = (datetime.combine(date.today(), TARGET_SEND_TIME) + timedelta(minutes=1)).time()
 
-            time_in_range = (TARGET_SEND_TIME <= current_time <
-                             dt_time(TARGET_SEND_TIME.hour, (TARGET_SEND_TIME.minute + 1) % 60))
+            time_in_range = TARGET_SEND_TIME <= current_time < target_plus_one_minute
 
             if time_in_range and today != last_run_date:
                 logging.info(f"Target time reached ({current_time.strftime('%H:%M:%S')}). Running bot in normal mode...")
                 try:
                     run_bot()
+                except Exception as e:
+                     logging.error(f"FATAL: An unhandled exception escaped from run_bot: {e}")
+                finally:
                     last_run_date = today
                     logging.info(f"Normal mode run for {today} completed. Waiting until tomorrow {TARGET_SEND_TIME.strftime('%H:%M')}.")
-                except Exception as e:
-                     logging.error(f"Error during scheduled run_bot (see details above). Marking as run for today to prevent retries.")
-                     last_run_date = today
 
-            check_interval_seconds = 60
-            try:
-                time_diff = (datetime.combine(date.today(), TARGET_SEND_TIME) - datetime.now()).total_seconds()
-                if time_diff < 0 and last_run_date != today:
-                     check_interval_seconds = 10
-                elif 0 < time_diff < 300:
-                    check_interval_seconds = 10
-            except Exception:
-                 pass
+            now = datetime.now()
+            next_run_dt = datetime.combine(now.date(), TARGET_SEND_TIME)
+            if now > next_run_dt:
+                next_run_dt += timedelta(days=1)
+            
+            sleep_seconds = (next_run_dt - now).total_seconds()
+            if sleep_seconds < 300:
+                check_interval_seconds = 5
+            else:
+                check_interval_seconds = 60
 
-            sleep_duration = check_interval_seconds
-            if today == last_run_date:
-                 try:
-                     now = datetime.now()
-                     tomorrow = today + timedelta(days=1)
-                     next_run_dt = datetime.combine(tomorrow, TARGET_SEND_TIME)
-                     sleep_seconds = (next_run_dt - now).total_seconds()
-                     if sleep_seconds > 0:
-                          sleep_duration = min(sleep_seconds, 3600)
-                     else:
-                          sleep_duration = check_interval_seconds
-                 except Exception:
-                       sleep_duration = check_interval_seconds
-
-            logging.debug(f"Sleeping for {sleep_duration:.1f} seconds...")
-            time.sleep(sleep_duration)
+            logging.debug(f"Next check in {check_interval_seconds} seconds. Next run target: {next_run_dt.strftime('%Y-%m-%d %H:%M:%S')}")
+            time.sleep(check_interval_seconds)
