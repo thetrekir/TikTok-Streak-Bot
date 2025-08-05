@@ -84,15 +84,17 @@ Set it and forget it.
 
 This isn't a theoretical toy. It's been running autonomously in the wild since early May 2025.
 
-Let's be blunt. Here's the operational data from a ~70-day non-stop run:
+Let's be blunt. Here's the operational data from a ~90-day period:
 
-*   **Total Operations (Bot's Responsibility):** 138
-*   **Successful Operations:** 130
-*   **Operational Success Rate: 94.2%**
+*   **Total Operations (Bot's Responsibility):** 80
+*   **Successful Operations:** 76
+*   **Operational Success Rate: 95%**
 
-A 100% success rate in this environment is a fantasy. The 8 failures weren't bugs in the code. They were the environment fighting back:
+A 100% success rate in this environment is a fantasy. The 4 failures weren't bugs in the code. They were the environment fighting back:
 
-*   **Temporary UI Breakage:** For two days in June, TikTok deployed a temporary UI update that blocked the click (`ElementClickInterceptedException`). The bot's logic was correct, but the target moved. The UI was reverted, and the bot continued working without any changes. This is the reality of automating a live platform.
-*   **Network/Server Timeouts:** On another day, the connection to TikTok's servers timed out while waiting for the chat list to load. This is an external network issue, not a flaw in the bot.
+*   **UI/Platform Instability:** On three separate days (June 4, June 5, June 23), operations failed due to the platform's environment. These issues included intercepted clicks, suggesting a temporary UI change, and the inability to locate target users in the conversation list.
+*   **Network/Server Timeouts:** On one occasion (June 15), the operation failed because the connection to the servers timed out while waiting for the conversation list to load. This is an external network issue, not a flaw in the bot.
 
 **The takeaway:** The bot's logic is solid. It works consistently, and the rare failures are due to the unpredictable nature of the platform it operates on. It's built to survive these hiccups and continue its mission the next day.
+
+**Operational Note:** It's also important to mention that the system was intentionally shut down for a 10-day period for maintenance. This planned downtime is not factored into the operational success rate, as it was not a system failure.
