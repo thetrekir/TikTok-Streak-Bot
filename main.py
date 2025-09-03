@@ -6,6 +6,7 @@ import sys
 import os
 import shutil
 import tempfile
+import platform
 from datetime import datetime, time as dt_time, date, timedelta
 from contextlib import contextmanager
 
@@ -375,9 +376,22 @@ def handle_passkey_popup(driver):
         logging.warning(f"An error occurred while handling the passkey popup: {e}")
 
 @contextmanager
+def is_arm_architecture():
+    machine_arch = platform.machine().lower()
+    return 'arm' in machine_arch or 'aarch64' in machine_arch
+
 def managed_webdriver(headless, user_agent):
     terminate_lingering_processes()
     time.sleep(1)
+    if is_arm_architecture():
+        try:
+            Service(executable_path=ChromeDriverManager().install())
+        except Exception as e:
+            if "Exec format error" in str(e) or is_arm_architecture():
+                 logging.critical("ARM ARCHITECTURE DETECTED AND NO COMPATIBLE DRIVER FOUND.")
+                 logging.critical("webdriver-manager cannot automatically download a driver for this system.")
+                 logging.critical("See the 'Troubleshooting' section in README.md for manual solutions.")
+                 sys.exit(1)
 
     user_data_dir = tempfile.mkdtemp()
     logging.info(f"Using temporary user data directory: {user_data_dir}")
