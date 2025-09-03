@@ -411,6 +411,7 @@ def managed_webdriver(headless, user_agent):
             try:
                 logging.info("Attempting graceful shutdown with driver.quit().")
                 driver.quit()
+                time.sleep(2) 
             except Exception as e:
                 logging.warning(f"Error during driver.quit() (might be already closed): {e}")
         
@@ -419,9 +420,10 @@ def managed_webdriver(headless, user_agent):
         logging.info(f"Cleaning up temporary user data directory: {user_data_dir}")
         try:
             time.sleep(2)
-            shutil.rmtree(user_data_dir)
+            shutil.rmtree(user_data_dir, ignore_errors=True)
+            logging.info(f"Successfully initiated cleanup for temp directory: {user_data_dir}")
         except Exception as e:
-            logging.warning(f"Could not fully remove temp directory {user_data_dir}. It might be cleaned up later. Error: {e}")
+            logging.error(f"CRITICAL: Failed to remove temp directory {user_data_dir}. This may cause issues on next run. Error: {e}")
 
 def run_bot():
     if TEST_MODE:
