@@ -379,7 +379,7 @@ def handle_passkey_popup(driver):
 def is_arm_architecture():
     machine_arch = platform.machine().lower()
     return 'arm' in machine_arch or 'aarch64' in machine_arch
-
+@contextmanager
 def managed_webdriver(headless, user_agent):
     terminate_lingering_processes()
     time.sleep(1)
@@ -536,3 +536,4 @@ if __name__ == "__main__":
 
             logging.debug(f"Next check in {check_interval_seconds} seconds. Next run target: {next_run_dt.strftime('%Y-%m-%d %H:%M:%S')}")
             time.sleep(check_interval_seconds)
+
